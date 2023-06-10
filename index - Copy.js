@@ -1,24 +1,11 @@
 const { UserAgent, Registerer, Inviter, SessionState, Web } = SIP;
 
-const serverDomain = credentials.domain;
-const username = credentials.user, password = credentials.pass;
-
-let tabUniqueID;
-
-var call = {
-  "call": "false",
-  "phone": "0559661311",
-  "name": "eli",
-  "email": "something"
-}
-
 // const serverDomain = 'webrtc.bluebe.net';
 // const username = '316!!caspiWRTCxr';
 // const password = 'Ncj487De';
-
-//const serverDomain = 'sipjs.onsip.com';
-//const username = 'Alice';
-//const password = 'password';
+const serverDomain = 'sipjs.onsip.com';
+const username = 'Alice';
+const password = 'password';
 const baseApiUrl = 'https://bull36.com/api.php';
 
 const uri = UserAgent.makeURI(`sip:${username}@${serverDomain}`);
@@ -42,16 +29,9 @@ document.getElementById("callButton").addEventListener('click', () => {
   if (isCalling) {
     phoneNum = document.getElementById("phone").value;
     makeCall(phoneNum);
-    document.getElementById("callButton").style.backgroundColor = '#ff0000'
   } else {
     endCall();
-    document.getElementById("callButton").style.backgroundColor = '#4cd192';
   }
-});
-
-document.getElementById("btn-reload").addEventListener('click', () => {
-  localStorage.clear();
-  init();
 });
 
 getButtons("keypad").forEach(btn => {
@@ -67,11 +47,11 @@ const configuration = {
   //   constraints: { audio: true, video: false }, // audio only call
   //   remote: { audio: document.getElementById("remote-audio") }
   // },
-  authorizationUsername: username,
-  authorizationPassword: password,
+  // authorizationUsername: username,
+  // authorizationPassword: password,
   transportOptions: {
-    server: `wss://${serverDomain}`
-    // server: `wss://edge.sip.onsip.com`
+    // server: `wss://${serverDomain}`
+    server: `wss://edge.sip.onsip.com`
   },
   delegate: {
     onInvite
@@ -120,34 +100,53 @@ function onInvite(invitation) {
 
   if (confirm(confirmText)) {
     phoneNum = invitation.incomingInviteRequest.message.to.uri.user;
-    invitation.accept({
-      sessionDescriptionHandlerOptions: {
-        constraints: { audio: true, video: false }
-      }
+    startCall(() => {
+      invitation.accept({
+        sessionDescriptionHandlerOptions: {
+          constraints: { audio: true, video: false }
+        }
+      });
     });
-    invitation.stateChange.addListener(state => {
-      console.info("###", `Session state changed to ${state}`);
-      
-      switch (state) {
-        case SessionState.Initial:
-          console.info("###", "Initialize session state");
-          break;
-        case SessionState.Establishing:
-          console.info("###", "Session state is Establishing");
-          break;
-        case SessionState.Established:
-          startCall(() => {
-            setupRemoteMedia(invitation);
-          });
-          break;
-        case SessionState.Terminating:
-        case SessionState.Terminated:
-          endCall();
-          break;
-        default:
-          throw new Error("Unknown session state.");
-      }
-    });
+  invitation.stateChange.addListener(state => {
+    console.info("###", `Session state changed to ${state}`);
+    
+    switch (state) {
+      case SessionState.Initial:
+        console.info("###", "Initialize session state");
+        break;
+      case SessionState.Establishing:
+        console.info("###", "Session state is Establishing");
+        break;
+      case SessionState.Established:
+        startCall(() => {
+          setupRemoteMedia(invitation);
+        });
+        break;
+      case SessionState.Terminating:
+      case SessionState.Terminated:
+        endCall();
+        break;
+      default:
+        throw new Error("Unknown session state.");
+    }
+  });
+    // callApiUrl += "?token=GC8RUZ98QWERT";
+    // callApiUrl += "&api=sip";
+    // callApiUrl += "&type=start_call";
+    // callApiUrl += "&direction=in";
+    // callApiUrl += "&phone=" + invitation.incomingRequestMessage.to.uri.user;
+    // $.get(callApiUrl, (data, status) => {
+    //   if (status == "success") {
+    //     let parseData = JSON.parse(data);
+    //     if (parseData.status) {
+    //       invitation.accept({
+    //         sessionDescriptionHandlerOptions: {
+    //           constraints: { audio: true, video: false }
+    //         }
+    //       });
+    //     }
+    //   }
+    // })
   } else {
     invitation.reject();
   }
@@ -207,22 +206,16 @@ function makeCall(phoneNumber) {
 const remoteStream = new MediaStream();
 function setupRemoteMedia(session) {
   console.log("###", session);
-  const recordStream = new MediaStream();
   session.sessionDescriptionHandler.peerConnection.getReceivers().forEach((receiver) => {
     if (receiver.track) {
       remoteStream.addTrack(receiver.track);
-      recordStream.addTrack(receiver.track);
     }
   });
   mediaElement.srcObject = remoteStream;
   mediaElement.play();
 
-  session.sessionDescriptionHandler.peerConnection.getSenders().forEach((sender) => {
-    if (sender.track) recordStream.addTrack(sender.track);
-  });
-
   const audioContext = new AudioContext();
-  let input = audioContext.createMediaStreamSource(recordStream);
+  let input = audioContext.createMediaStreamSource(remoteStream);
   rec = new Recorder(input, { numChannels: 1 });
   rec.record();
 }
@@ -257,13 +250,11 @@ function endCall() {
     // Create a new FormData object.
     var formData = new FormData();
 
-    saveAs(blob, "test.wav");
-
     formData.append('token', "GC8RUZ98QWERT");
     formData.append('type', "end_call");
     formData.append('direction', "in");
     formData.append('phone', phoneNum);
-    formData.append('file', blob, 'test.wav');
+    formData.append('file', blob);
 
     $.ajax({
       url: baseApiUrl,
@@ -273,7 +264,13 @@ function endCall() {
       contentType: false,
       success: (data, status) => {
         cleanupMedia();
-        console.log('succeed', '#', data, '#', status);	
+        console.log('succeed', '#', data, '#', status);
+        /*if (status === "success") {
+          let parseData = JSON.parse(data);
+          if (parseData.status) {
+            cleanupMedia();
+          }
+        }*/
       },
       error: () => {
         console.error('End call Error!');
@@ -302,52 +299,3 @@ function endCall() {
       break;
   }
 }
-
-/**
- * Between Tabs Communication
- */
-
-function init() {
-  tabUniqueID = new Date().getTime();
-  if (localStorage.getItem("sipjs4client")) {
-    document.getElementById("root").style.display = 'none';
-    document.getElementById("other-tab").style.display = 'flex';
-  } else {
-    document.getElementById("root").style.display = 'block';
-    document.getElementById("other-tab").style.display = 'none';
-    localStorage.setItem('sipjs4client', tabUniqueID);
-    console.log("###Saved to localStorage");
-  }
-}
-
-function breakTab() {
-  document.getElementById("root").style.display = 'none';
-  document.getElementById("other-tab").style.display = 'flex';
-}
-
-// Event listener for the 'storage' event
-window.onload = () => {
-  init();
-};
-
-window.onbeforeunload =  (event) => {
-  event.preventDefault();
-  event.returnValue = '';
-  localStorage.clear();
-};
-
-// Event listener for the 'storage' event
-window.addEventListener('storage', function(event) {
-  if (event.storageArea === localStorage) {
-    // Check if the key you're interested in has changed
-    if (event.key === 'sipjs4client') {
-      // The value of 'yourKey' in localStorage has changed
-      if (event.newValue === null) {
-        init();
-      }
-      if (event.newValue !== tabUniqueID) {
-        breakTab();
-      }
-    }
-  }
-});
