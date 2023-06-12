@@ -8,7 +8,9 @@ var call = {
   "phone": "0559661311",
   "name": "eli",
   "email": "something"
-}
+};
+
+var dialStatus = "hangup"; // (calling - ringing.wav, incoming - ringing2.wav), ringtone - incall, hangup - hangup.wav
 
 // Hook call object
 var callProxy = new Proxy(call, {
@@ -59,15 +61,21 @@ const configuration = isTest
 
 let userAgent, registerer;
 let session, callPhoneNumber, isCalling = false, callRecorder = null, callDirection, callStatus = "notanswered";
+let isMuteSpeaker = false, isMuteMicrophone = false;
 let tabUniqueID;
 
 const baseApiUrl = 'https://bull36.com/api/sip_file.php';
 const remoteMediaElement = document.getElementById('remoteAudio');
 
-window.onload = intialize;
+const ringAudio = document.getElementById("startAudio");
+const callAudio = document.getElementById("callAudio");
+const incallAudio = document.getElementById("incallAudio");
+const hangupAudio = document.getElementById("hangupAudio");
+
+window.onload = initialize;
 window.onbeforeunload = finalize;
 
-function intialize() {
+function initialize() {
   getButtons("keypad").forEach(btn => {
     btn.addEventListener('click', (e) => {
       document.getElementById("phone").value = document.getElementById("phone").value + e.target.innerText;
@@ -94,6 +102,40 @@ function intialize() {
   });
 
   initTab();
+
+  // Repeat Audio
+  incallAudio.addEventListener('ended', () => {
+    if (dialStatus !== 'incoming') return;
+    incallAudio.currentTime = 0;
+    incallAudio.play();
+  });
+  callAudio.addEventListener('ended', () => {
+    if (dialStatus !== 'calling') return;
+    callAudio.currentTime = 0;
+    callAudio.play();
+  });
+
+  document.getElementById("speakerButton").addEventListener("click", () => {
+    isMuteSpeaker = !isMuteSpeaker;
+    document.getElementById("speakerButton").children[0].className = isMuteSpeaker ? 'bi bi-volume-mute-fill' : 'bi bi-volume-up-fill';
+
+    if (!session) return;
+    
+    // Get the remote audio stream and mute
+    const remoteStream = session.sessionDescriptionHandler.peerConnection.getRemoteStreams()[0];
+    remoteStream.getAudioTracks()[0].enabled = !isMuteSpeaker;    
+  });
+
+  document.getElementById("microphoneButton").addEventListener("click", (e) => {
+    isMuteMicrophone = !isMuteMicrophone;
+    document.getElementById("microphoneButton").children[0].className = isMuteMicrophone ? 'bi bi-mic-mute-fill' : 'bi bi-mic-fill';
+
+    if (!session) return;  
+    
+    // Get the local audio stream and mute
+    const localStream = session.sessionDescriptionHandler.peerConnection.getLocalStreams()[0];
+    localStream.getAudioTracks()[0].enabled = !isMuteMicrophone;
+  });
   
   userAgent = new UserAgent(configuration);
   registerer = new Registerer(userAgent);
@@ -132,6 +174,7 @@ function startCall() {
   isCalling = true;
   document.getElementById("callButton").style.backgroundColor = '#ff0000';
   callDirection = "out";
+  changeDialStatus("calling");
 
   callPhoneNumber = call.phone; // document.getElementById("phone").value;
   sendStartCallMessage();
@@ -205,6 +248,10 @@ function setupRemoteMedia() {
   remoteMediaElement.srcObject = remoteStream;
   remoteMediaElement.play();
 
+  // Mute/Unmute speaker & microphone
+  remoteStream.getAudioTracks()[0].enabled = !isMuteSpeaker;    
+  localStream.getAudioTracks()[0].enabled = !isMuteMicrophone;
+  
   println("Mixing local stream and remote stream...");
   // Create a new AudioContext object
   var context = new AudioContext();
@@ -235,6 +282,8 @@ function setupRemoteMedia() {
   // Create a new MediaRecorder object and pass the mixed audio stream to it
   let input = context.createMediaStreamSource(destination.stream);
 
+  changeDialStatus("ringtone");
+
   println("Start recording...");
   if (callRecorder) delete callRecorder;
   callRecorder = new Recorder(input, { numChannels: 1 });
@@ -264,6 +313,7 @@ function handleInvite(invitation) {
   callPhoneNumber = session.incomingInviteRequest.message.to.uri.user;
   sendStartCallMessage();
   callStatus = "notanswered";
+  changeDialStatus("incoming");
 
   if (isCalling) {
     session.reject();
@@ -307,16 +357,17 @@ function sendEndCallMessage() {
       data: formData,
       processData: false,
       contentType: false,
-      success: (data, status) => {
-        println(["Call ended", data, status]);
-      },
+      success: (data, status) => println(["Call ended", data, status]),
       error: () => printError("Failed to end the call")
     });
   } else {
     callRecorder.stop();
     callRecorder.exportWAV((blob) => {
       formData.append("file", blob, "test.wav");
-      saveAs(blob);
+
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email").value;
+      saveAs(blob, name + "-" + email + "-" + callPhoneNumber + "-" + moment().format("YYYY-MM-DD HH:MM:SS") + ".wav");
 
       $.ajax({
         url: baseApiUrl,
@@ -324,9 +375,7 @@ function sendEndCallMessage() {
         data: formData,
         processData: false,
         contentType: false,
-        success: (data, status) => {
-          println(["Call ended", data, status]);
-        },
+        success: (data, status) => println(["Call ended", data, status]),
         error: () => printError("Failed to end the call")
       });
 
@@ -348,6 +397,8 @@ function sendEndCallMessage() {
     default:
       break;
   }
+  
+  changeDialStatus("hangup");
 }
 
 function cleanupMedia() {
@@ -409,6 +460,31 @@ function printError(err) {
     console.error("###", ...err);
   } else {
     console.error("###", err);
+  }
+}
+
+/**
+ * Ringtone
+ * 
+ * calling - ringing.wav, incoming - ringing2.wav
+ * ringtone.wav - incall
+ * hangup - hangup.wav
+ */
+function changeDialStatus(status) {
+  dialStatus = status;
+  switch (status) {
+    case 'calling':
+      callAudio.play();
+      break;
+    case 'incoming':
+      incallAudio.play();
+      break;
+    case 'ringtone':
+      ringAudio.play();
+      break;
+    case 'hangup':
+      hangupAudio.play();
+      break;
   }
 }
 

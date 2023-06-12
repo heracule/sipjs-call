@@ -37,7 +37,7 @@
                   <div class="name">Name:</div>
                 </div>
                 <div class="col-md-8">
-                  <input type="text" class="input_start" placeholder="Alex Alcardo">
+                  <input id="name" type="text" class="input_start" placeholder="Alex Alcardo">
                 </div>
               </div>
             </div>
@@ -47,7 +47,7 @@
                   <div class="name">eMail:</div>
                 </div>
                 <div class="col-md-8">
-                  <input type="email" class="input_start" placeholder="abcs@gmai.com">
+                  <input id="email" type="email" class="input_start" placeholder="abcs@gmai.com">
                 </div>
               </div>
             </div>
@@ -124,6 +124,7 @@
                 </button>
               </div>
             </div>
+
             <div class="d-flex justify-content-center">
               <div><span style="color: #ff3ca2;">Feedback:</span></div>
               <div class="text-start mx-1 ">
@@ -135,12 +136,15 @@
                 </ul>
               </div>
             </div>
-
           </div>
         </div>
       </div>
     </div>
-    <audio autoplay id="remoteAudio">
+    <audio autoplay id="remoteAudio"></audio>
+    <audio id="callAudio" src="ringtones/calling.wav"></audio>
+    <audio id="startAudio" src="ringtones/start.wav"></audio>
+    <audio id="incallAudio" src="ringtones/incall.wav"></audio>
+    <audio id="hangupAudio" src="ringtones/hangup.wav"></audio>
   </div>
 
   <!--
@@ -181,6 +185,7 @@
     integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
     crossorigin="anonymous"></script>
   <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script type="text/javascript" src="moment.min.js"></script>
   <script type="text/javascript" src="sip-0.16.0.js"></script>
   <script type="text/javascript" src="recorder.js"></script>
   <script type="text/javascript" src="FileSaver.min.js"></script>
