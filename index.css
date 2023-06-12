@@ -129,15 +129,31 @@
   font-weight: 800;
   color: black;
 }
-.btn_tele{
+.btn_tele {
   background-color: #4cd192;
   color: white;
   border: none;
-  /* padding: 3px 11px; */
   border-radius: 4px;
   padding: 3px 12px;
   width: 40px;
   height: 40px;
+  transition: all 0.3s;
+}
+.btn_tele:hover {
+  background-color: #26694a;
+}
+.btn_hangup {
+  background-color: red;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 12px;
+  width: 40px;
+  height: 40px;
+  transition: all 0.3s;
+}
+.btn_hangup:hover {
+  background-color: #660202;
 }
 .btn_value{
   background-color: #0d0041;

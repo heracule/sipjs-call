@@ -1,7 +1,7 @@
 const { UserAgent, Registerer, Inviter, SessionState, Web } = SIP;
 
 // Test flag
-const isTest = true;
+const isTest = false;
 
 var call = {
   "call": false,
@@ -88,11 +88,17 @@ function initialize() {
 
   document.getElementById("callButton").disabled = true;
   document.getElementById("callButton").addEventListener('click', () => {
-    if (!isCalling) {
-      startCall();
-    } else {
-      hangup();
-    }
+    if (session) {
+      session.accept({
+        sessionDescriptionHandlerOptions: {
+          constraints: { audio: true, video: false }
+        }
+      });
+    } else if (!isCalling) startCall();
+  });
+  document.getElementById("hangupButton").addEventListener("click", () => {
+    if (dialStatus == "incoming") session.reject();
+    else hangup();
   });
   
   document.getElementById("reloadButton").addEventListener('click', () => {
@@ -111,8 +117,12 @@ function initialize() {
   });
   callAudio.addEventListener('ended', () => {
     if (dialStatus !== 'calling') return;
-    callAudio.currentTime = 0;
-    callAudio.play();
+    if (callDirection == "out") {
+      callAudio.currentTime = 0;
+      callAudio.play();
+    } else {
+      session.reject();
+    }
   });
 
   document.getElementById("speakerButton").addEventListener("click", () => {
@@ -172,7 +182,7 @@ function startCall() {
   if (isCalling) return;
 
   isCalling = true;
-  document.getElementById("callButton").style.backgroundColor = '#ff0000';
+  document.getElementById("callButton").enable = false;
   callDirection = "out";
   changeDialStatus("calling");
 
@@ -313,6 +323,8 @@ function handleInvite(invitation) {
   callPhoneNumber = session.incomingInviteRequest.message.to.uri.user;
   sendStartCallMessage();
   callStatus = "notanswered";
+  
+  println("Why changeDialStatus can't be called");
   changeDialStatus("incoming");
 
   if (isCalling) {
@@ -321,10 +333,10 @@ function handleInvite(invitation) {
   }
 
   isCalling = true;
-  document.getElementById("callButton").style.backgroundColor = '#ff0000';
+  document.getElementById("callButton").enabled = false;
 
   // Confirm accept or reject?
-  let confirmText = "Incoming call:";
+  /* let confirmText = "Incoming call:";
   confirmText += "\nFrom: " + session.incomingInviteRequest.message.from.uri.aor;
   confirmText += "\nTo: " + session.incomingInviteRequest.message.to.uri.aor;
   confirmText += "\nAccept or Reject?";
@@ -336,7 +348,7 @@ function handleInvite(invitation) {
         constraints: { audio: true, video: false }
       }
     });
-  }
+  } */
 }
 
 function sendEndCallMessage() {
@@ -349,6 +361,7 @@ function sendEndCallMessage() {
   formData.append('direction', callDirection);
   formData.append('phone', callPhoneNumber);
   formData.append('status', callStatus);
+  formData.append('next', 1);
 
   if (callStatus === "notanswered") {
     $.ajax({
@@ -357,7 +370,16 @@ function sendEndCallMessage() {
       data: formData,
       processData: false,
       contentType: false,
-      success: (data, status) => println(["Call ended", data, status]),
+      success: (data, status) => {
+        println(["Call ended", data, status]);
+
+        setTimeout(() => {
+          const response = JSON.parse(data);
+          if (response.next_phone !== 'done') return;
+          callProxy.phone = response.next_phone;
+          callProxy.call = true;
+        }, 500);
+      },
       error: () => printError("Failed to end the call")
     });
   } else {
@@ -375,7 +397,15 @@ function sendEndCallMessage() {
         data: formData,
         processData: false,
         contentType: false,
-        success: (data, status) => println(["Call ended", data, status]),
+        success: (data, status) => {
+          println(["Call ended", data, status]);
+          setTimeout(() => {
+            const response = JSON.parse(data);
+            if (response.next_phone !== 'done') return;
+            callProxy.phone = response.next_phone;
+            callProxy.call = true;
+          }, 500);
+        },
         error: () => printError("Failed to end the call")
       });
 
@@ -426,7 +456,8 @@ function endCall() {
   if (!isCalling) return;
 
   isCalling = false;
-  document.getElementById("callButton").style.backgroundColor = '#4CD192';
+  document.getElementById("callButton").enabled = true;
+  callProxy.call = false;
 }
 
 function finalize(event) {
@@ -471,6 +502,13 @@ function printError(err) {
  * hangup - hangup.wav
  */
 function changeDialStatus(status) {
+  /*callAudio.stop();
+  incallAudio.stop();
+  ringAudio.stop();
+  hangupAudio.stop();*/
+
+  println(["Change dial status: ", dialStatus, status]);
+
   dialStatus = status;
   switch (status) {
     case 'calling':
