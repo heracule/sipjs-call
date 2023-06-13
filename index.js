@@ -11,6 +11,7 @@ var call = {
 };
 
 var dialStatus = "hangup"; // (calling - ringing.wav, incoming - ringing2.wav), ringtone - incall, hangup - hangup.wav
+var nextCall = false;
 
 // Hook call object
 var callProxy = new Proxy(call, {
@@ -117,12 +118,8 @@ function initialize() {
   });
   callAudio.addEventListener('ended', () => {
     if (dialStatus !== 'calling') return;
-    if (callDirection == "out") {
-      callAudio.currentTime = 0;
-      callAudio.play();
-    } else {
-      session.reject();
-    }
+    callAudio.currentTime = 0;
+    callAudio.play();
   });
 
   document.getElementById("speakerButton").addEventListener("click", () => {
@@ -214,6 +211,7 @@ function startCall() {
       case SessionState.Established:
         setupRemoteMedia();
         break;
+      case SessionState.Terminating:
       case SessionState.Terminated:
         sendEndCallMessage();
         cleanupMedia();
@@ -311,6 +309,7 @@ function handleInvite(invitation) {
       case SessionState.Established:    
         setupRemoteMedia();
         break;
+      case SessionState.Terminating:
       case SessionState.Terminated:
         sendEndCallMessage();
         cleanupMedia();
@@ -352,7 +351,11 @@ function handleInvite(invitation) {
 }
 
 function sendEndCallMessage() {
+  if (dialStatus == "hangup") return;
+
   println("Send end_call to the server...");
+  changeDialStatus("hangup");
+
   // Prepare form data for call log
   var formData = new FormData();
   formData.append('token', "GC8RUZ98QWERT");
@@ -373,12 +376,13 @@ function sendEndCallMessage() {
       success: (data, status) => {
         println(["Call ended", data, status]);
 
+        const response = JSON.parse(data);
+        if (response.next_phone === 'done') return;
         setTimeout(() => {
-          const response = JSON.parse(data);
-          if (response.next_phone !== 'done') return;
           callProxy.phone = response.next_phone;
           callProxy.call = true;
-        }, 500);
+          nextCall = true;
+        }, 3000);
       },
       error: () => printError("Failed to end the call")
     });
@@ -399,12 +403,13 @@ function sendEndCallMessage() {
         contentType: false,
         success: (data, status) => {
           println(["Call ended", data, status]);
+          const response = JSON.parse(data);
+          if (response.next_phone === 'done') return;
           setTimeout(() => {
-            const response = JSON.parse(data);
-            if (response.next_phone !== 'done') return;
             callProxy.phone = response.next_phone;
             callProxy.call = true;
-          }, 500);
+            nextCall = true;
+          }, 3000);
         },
         error: () => printError("Failed to end the call")
       });
@@ -427,8 +432,6 @@ function sendEndCallMessage() {
     default:
       break;
   }
-  
-  changeDialStatus("hangup");
 }
 
 function cleanupMedia() {
@@ -437,6 +440,7 @@ function cleanupMedia() {
 }
 
 function hangup() {
+  if (session == null) return;
   println(["Hang up...", session.state]);
   switch(session.state) {
     case SessionState.Initial:
@@ -458,6 +462,11 @@ function endCall() {
   isCalling = false;
   document.getElementById("callButton").enabled = true;
   callProxy.call = false;
+
+  if (nextCall) {
+    nextCall = false;
+    callProxy.call = true;
+  }
 }
 
 function finalize(event) {
@@ -501,13 +510,21 @@ function printError(err) {
  * ringtone.wav - incall
  * hangup - hangup.wav
  */
+function initAudioPlayer() {
+  callAudio.currentTime = 0;
+  callAudio.pause();
+  incallAudio.currentTime = 0;
+  incallAudio.pause();
+  ringAudio.currentTime = 0;
+  ringAudio.pause();
+  hangupAudio.currentTime = 0;
+  hangupAudio.pause();
+}
 function changeDialStatus(status) {
-  /*callAudio.stop();
-  incallAudio.stop();
-  ringAudio.stop();
-  hangupAudio.stop();*/
+  initAudioPlayer();
 
   println(["Change dial status: ", dialStatus, status]);
+  document.getElementsByClassName('con')[0].innerText = status;
 
   dialStatus = status;
   switch (status) {
