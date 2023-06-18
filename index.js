@@ -61,7 +61,8 @@ const configuration = isTest
     };
 
 let userAgent, registerer;
-let session, callPhoneNumber, isCalling = false, callRecorder = null, callDirection, callStatus = "notanswered";
+let session, callPhoneNumber, receiverPhoneNumber, isCalling = false, callRecorder = null, callDirection, callStatus = "notanswered";
+let localMediaStream = null;
 let isMuteSpeaker = false, isMuteMicrophone = false;
 let tabUniqueID;
 
@@ -81,7 +82,7 @@ function initialize() {
     btn.addEventListener('click', (e) => {
       document.getElementById("phone").value = document.getElementById("phone").value + e.target.innerText;
     });
-  })
+  });
   
   document.getElementById("phone").addEventListener('input', (e) => {
     callProxy.phone = e.target.value;
@@ -112,12 +113,12 @@ function initialize() {
 
   // Repeat Audio
   incallAudio.addEventListener('ended', () => {
-    if (dialStatus !== 'incoming') return;
+    if (dialStatus !== 'Incoming Call') return;
     incallAudio.currentTime = 0;
     incallAudio.play();
   });
   callAudio.addEventListener('ended', () => {
-    if (dialStatus !== 'calling') return;
+    if (dialStatus !== 'Ringing') return;
     callAudio.currentTime = 0;
     callAudio.play();
   });
@@ -143,6 +144,8 @@ function initialize() {
     const localStream = session.sessionDescriptionHandler.peerConnection.getLocalStreams()[0];
     localStream.getAudioTracks()[0].enabled = !isMuteMicrophone;
   });
+
+  changeDialStatus("Connecting");
   
   userAgent = new UserAgent(configuration);
   registerer = new Registerer(userAgent);
@@ -150,6 +153,7 @@ function initialize() {
   userAgent.start()
     .then(() => {
       println("Connected to the SIP provider.");
+      changeDialStatus("Connected");
       registerer
         .register({
           requestDelegate: {
@@ -170,6 +174,7 @@ function initialize() {
         });
     })
     .catch(err => {
+      changeDialStatus("Disconnected");
       printError("Failed to connect to the SIP provider");
       printError(err);
     });
@@ -181,7 +186,7 @@ function startCall() {
   isCalling = true;
   document.getElementById("callButton").enable = false;
   callDirection = "out";
-  changeDialStatus("calling");
+  changeDialStatus("Ringing");
 
   callPhoneNumber = call.phone; // document.getElementById("phone").value;
   sendStartCallMessage();
@@ -290,7 +295,7 @@ function setupRemoteMedia() {
   // Create a new MediaRecorder object and pass the mixed audio stream to it
   let input = context.createMediaStreamSource(destination.stream);
 
-  changeDialStatus("ringtone");
+  changeDialStatus("In Call");
 
   println("Start recording...");
   if (callRecorder) delete callRecorder;
@@ -317,14 +322,15 @@ function handleInvite(invitation) {
         break;
       default: break;
     }
-  });  
+  });
+
+  println(session.incomingInviteRequest.message);
   
-  callPhoneNumber = session.incomingInviteRequest.message.to.uri.user;
+  callPhoneNumber = session.incomingInviteRequest.message.from.uri.user;
   sendStartCallMessage();
   callStatus = "notanswered";
   
-  println("Why changeDialStatus can't be called");
-  changeDialStatus("incoming");
+  changeDialStatus("Incoming Call");
 
   if (isCalling) {
     session.reject();
@@ -334,8 +340,7 @@ function handleInvite(invitation) {
   isCalling = true;
   document.getElementById("callButton").enabled = false;
 
-  // Confirm accept or reject?
-  /* let confirmText = "Incoming call:";
+  let confirmText = "Incoming call:";
   confirmText += "\nFrom: " + session.incomingInviteRequest.message.from.uri.aor;
   confirmText += "\nTo: " + session.incomingInviteRequest.message.to.uri.aor;
   confirmText += "\nAccept or Reject?";
@@ -347,7 +352,7 @@ function handleInvite(invitation) {
         constraints: { audio: true, video: false }
       }
     });
-  } */
+  }
 }
 
 function sendEndCallMessage() {
@@ -531,14 +536,16 @@ function changeDialStatus(status) {
     case 'calling':
       callAudio.play();
       break;
-    case 'incoming':
+    case 'Incoming Call':
       incallAudio.play();
       break;
-    case 'ringtone':
+    case 'In Call':
       ringAudio.play();
       break;
     case 'hangup':
       hangupAudio.play();
+      break;
+    default:
       break;
   }
 }
@@ -554,6 +561,11 @@ function breakTab() {
     hangup();
     $('#staticBackdrop').modal('hide');
   }
+
+  // Stop all tracks to release resources and remove the red blinking icon
+  if (localMediaStream) {
+    localMediaStream.getTracks().forEach(track => track.stop());
+  }
 }
 
 function initTab() {
@@ -562,11 +574,20 @@ function initTab() {
     document.getElementById("root").style.display = 'none';
     document.getElementById("other-tab").style.display = 'flex';
     println("Oh, multi tabs detected.");
+
+    // Stop all tracks to release resources and remove the red blinking icon
+    if (localMediaStream) {
+      localMediaStream.getTracks().forEach(track => track.stop());
+    }
   } else {
     document.getElementById("root").style.display = 'block';
     document.getElementById("other-tab").style.display = 'none';
     localStorage.setItem('sipjs4client', tabUniqueID);
     println("Set time to the localStorage");
+
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(stream => localMediaStream = stream)
+      .catch(err => printError(["Cannot get microphone", err]));
   }
 }
 
