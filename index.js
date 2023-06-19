@@ -10,7 +10,7 @@ var call = {
   "email": "something"
 };
 
-var dialStatus = "hangup"; // (calling - ringing.wav, incoming - ringing2.wav), ringtone - incall, hangup - hangup.wav
+var dialStatus = ""; // (calling - ringing.wav, incoming - ringing2.wav), ringtone - incall, hangup - hangup.wav
 var nextCall = false;
 
 // Hook call object
@@ -99,7 +99,9 @@ function initialize() {
     } else if (!isCalling) startCall();
   });
   document.getElementById("hangupButton").addEventListener("click", () => {
-    if (dialStatus == "incoming") session.reject();
+    if (dialStatus == "Incoming Call") {
+      session.reject();
+    }
     else hangup();
   });
   
@@ -316,6 +318,7 @@ function handleInvite(invitation) {
         break;
       case SessionState.Terminating:
       case SessionState.Terminated:
+        println(session);
         sendEndCallMessage();
         cleanupMedia();
         endCall();
@@ -340,26 +343,14 @@ function handleInvite(invitation) {
   isCalling = true;
   document.getElementById("callButton").enabled = false;
 
-  let confirmText = "Incoming call:";
-  confirmText += "\nFrom: " + session.incomingInviteRequest.message.from.uri.aor;
-  confirmText += "\nTo: " + session.incomingInviteRequest.message.to.uri.aor;
-  confirmText += "\nAccept or Reject?";
-
-  if (!confirm(confirmText)) session.reject();
-  else {
-    session.accept({
-      sessionDescriptionHandlerOptions: {
-        constraints: { audio: true, video: false }
-      }
-    });
-  }
+  $('#staticBackdrop').modal('show');
 }
 
 function sendEndCallMessage() {
-  if (dialStatus == "hangup") return;
+  if (dialStatus == "Call ended") return;
 
   println("Send end_call to the server...");
-  changeDialStatus("hangup");
+  changeDialStatus("Call ended");
 
   // Prepare form data for call log
   var formData = new FormData();
@@ -529,11 +520,11 @@ function changeDialStatus(status) {
   initAudioPlayer();
 
   println(["Change dial status: ", dialStatus, status]);
-  document.getElementsByClassName('con')[0].innerText = status;
+  document.getElementsByClassName('con')[0].innerText = status == "Call ended" ? "Rejected" : status;
 
   dialStatus = status;
   switch (status) {
-    case 'calling':
+    case 'Outgoing Call':
       callAudio.play();
       break;
     case 'Incoming Call':
@@ -542,7 +533,7 @@ function changeDialStatus(status) {
     case 'In Call':
       ringAudio.play();
       break;
-    case 'hangup':
+    case 'Call ended':
       hangupAudio.play();
       break;
     default:
